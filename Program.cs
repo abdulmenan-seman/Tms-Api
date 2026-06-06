@@ -8,6 +8,21 @@ builder.Services
     .AddAuthentication("Training")
     .AddScheme<AuthenticationSchemeOptions, TrainingAuthHandler>("Training", null);
 builder.Services.AddAuthorization();
+// Bind structural elements and assign startup schema validation checks
+builder.Services.AddOptions<PaymentOptions>()
+    .BindConfiguration("Payments")       // Extracts JSON object matching key path
+    .ValidateDataAnnotations()          // Evaluates data layout model validation parameters
+    .ValidateOnStart();                 // Forces immediate checking at process startup
+// Add the conflicting registrations
+builder.Services.AddSingleton<EnrollmentWorker>();
+builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
+
+// Enforce container self-tests during process bootstrap
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateScopes = true;   // Throws exception if a singleton captures a scoped service
+    options.ValidateOnBuild = true;  // Triggers checking at boot rather than execution runtime
+});
 
 var app = builder.Build();
 
