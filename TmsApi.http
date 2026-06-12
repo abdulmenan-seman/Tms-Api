@@ -1,2 +1,8 @@
-http://localhost:5000/api/assessments/results
-//X-Training-User: Bob
+# POST http://localhost:5000/api/enrollments
+# Content-Type: application/json
+
+# {
+#   "studentId": "1234",
+#   "courseCode": "CS101"
+# }
+GET  http://localhost:5000/api/enrollments/51b6e489
