@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.OpenApi;
 using Scalar.AspNetCore;
+using TmsApi.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // --- SERVICES REGISTRATION ---
@@ -17,6 +18,8 @@ builder.Services.AddOptions<PaymentOptions>()
 // Add the conflicting registrations
 builder.Services.AddSingleton<EnrollmentWorker>();
 builder.Services.AddSingleton<IEnrollmentService, EnrollmentService>();
+builder.Services.AddSingleton<ICourseService, CourseService>();
+builder.Services.AddSingleton<IStudentService, StudentService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -62,6 +65,7 @@ app.MapControllers();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    //use swagger ui in development
     app.MapScalarApiReference();  // This creates the /scalar/v1 endpoint
 }
 else

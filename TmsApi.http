@@ -5,4 +5,4 @@
 #   "studentId": "1234",
 #   "courseCode": "CS101"
 # }
-GET  http://localhost:5000/api/enrollments/51b6e489
+//GET  http://localhost:5000/api/enrollments
