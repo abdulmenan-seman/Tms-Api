@@ -7,6 +7,10 @@ public class Student
 
     public decimal GPA { get; set; }
     public bool IsActive { get; set; } = true;
-
+     // Concurrency Token: Mapped to postgres system column xmin
+    public uint Version { get; set; }
+    
+    // Soft Delete Flag
+    public bool IsDeleted { get; set; } = false;
     public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
 }

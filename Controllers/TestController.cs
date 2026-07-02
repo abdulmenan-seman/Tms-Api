@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TmsApi.Data;
 using TmsApi.Entities;
 
@@ -78,5 +79,67 @@ public class TestController(TmsDbContext context) : ControllerBase
             .Where(s => IsHonorRoll(s.GPA)) // Safely evaluates custom C# logic locally in memory
             .ToList();
         return Ok(students);
+    }
+    [HttpGet("nplusone")]
+    public async Task<IActionResult> TestNPlusOne(CancellationToken cancellationToken)
+    {
+        Console.WriteLine("\n=== STARTING N+1 DEMONSTRATION ===");
+        
+        // 1. First query: Retrieve all students (1 query)
+        var students = await context.Students.AsNoTracking().ToListAsync(cancellationToken);
+        
+        var resultList = new List<object>();
+        // 2. Loop: For each student, query their enrollment count (N queries)
+        foreach (var s in students)
+        {
+            var count = await context.Enrollments
+                .AsNoTracking()
+                .CountAsync(e => e.StudentId == s.Id, cancellationToken);
+                
+            Console.WriteLine($"[N+1 Query] Student: {s.Name} has {count} enrollments");
+            
+            resultList.Add(new { s.Name, EnrollmentCount = count });
+        }
+        Console.WriteLine("=== ENDING N+1 DEMONSTRATION ===\n");
+        return Ok(resultList);
+    }
+
+    // EXERCISE 7 - Part B: Fixed with Projection (Single Query)
+    // -------------------------------------------------------------------------
+    [HttpGet("nplusone-fixed")]
+    public async Task<IActionResult> TestNPlusOneFixed(CancellationToken cancellationToken)
+    {
+        Console.WriteLine("\n=== STARTING FIXED SINGLE-TRIP QUERY ===");
+        
+        // Fix: Single query with projection (EF compiles this into a single query with sub-counts)
+        var report = await context.Students
+            .AsNoTracking()
+            .Select(s => new
+            {
+                s.Name,
+                EnrollmentCount = s.Enrollments.Count
+            })
+            .ToListAsync(cancellationToken);
+        foreach (var r in report)
+        {
+            Console.WriteLine($"[Shaped Query] Student: {r.Name} has {r.EnrollmentCount} enrollments");
+        }
+        Console.WriteLine("=== ENDING FIXED SINGLE-TRIP QUERY ===\n");
+        return Ok(report);
+    }
+    
+    [HttpGet("nplusone-include")]
+    public async Task<IActionResult> TestNPlusOneInclude(CancellationToken cancellationToken)
+    {
+        var students = await context.Students
+            .AsNoTracking()
+            .Include(s => s.Enrollments)
+            .ToListAsync(cancellationToken);
+        var report = students.Select(s => new
+        {
+            s.Name,
+            EnrollmentCount = s.Enrollments.Count
+        }).ToList();
+        return Ok(report);
     }
 }

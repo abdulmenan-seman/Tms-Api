@@ -6,3 +6,5 @@
 #   "courseCode": "CS101"
 # }
 //GET  http://localhost:5000/api/enrollments
+//http://localhost:5000/api/test/nplusone
+//http://localhost:5000/api/test/nplusone-fixed

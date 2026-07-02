@@ -34,6 +34,15 @@ public class StudentConfiguration : IEntityTypeConfiguration<Student>
         builder.Property(s => s.IsActive)
             .IsRequired()
             .HasDefaultValue(true);
+            // 1. Shadow Audit Property (does not exist in C# Student entity class)
+        builder.Property<DateTime>("LastUpdated")
+            .IsRequired()
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
+        // 2. Concurrency token mapped to PostgreSQL xmin system column
+        builder.Property(s => s.Version)
+            .IsRowVersion();
+        // 3. Soft Delete Global Query Filter
+        builder.HasQueryFilter(s => !s.IsDeleted);
 
         // Enforce structural database-level uniqueness on the natural key
         builder.HasIndex(s => s.RegistrationNumber)

@@ -40,6 +40,7 @@ public class ReportsController(TmsDbContext context) : ControllerBase
 
         return Ok(list);
     }
+    
 
     // 3. What is the average GPA per course?
     [HttpGet("average-gpa-per-course")]
