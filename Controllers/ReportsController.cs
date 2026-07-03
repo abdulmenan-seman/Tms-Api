@@ -31,9 +31,9 @@ public class ReportsController(TmsDbContext context) : ControllerBase
             .Select(c => new
             {
                 c.Title,
-                c.Capacity,
+                c.MaxCapacity,
                 EnrolledCount = c.Enrollments.Count,
-                SeatsRemaining = c.Capacity - c.Enrollments.Count
+                SeatsRemaining = c.MaxCapacity - c.Enrollments.Count
             })
             .OrderByDescending(c => c.SeatsRemaining)
             .ToListAsync();

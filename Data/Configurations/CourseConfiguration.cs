@@ -27,7 +27,7 @@ public class CourseConfiguration : IEntityTypeConfiguration<Course>
             .IsRequired()
             .HasMaxLength(200);
 // capacity should be a positive integer, so we can enforce that at the database level as well
-        builder.Property(c => c.Capacity)
+        builder.Property(c => c.MaxCapacity)
             .IsRequired()
             .HasDefaultValue(0) ; // Set a default value and enforce greter than or equal to 0 constraint
 
