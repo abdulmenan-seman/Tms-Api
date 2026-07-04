@@ -1,74 +1,39 @@
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using TmsApi.Models;
+using Microsoft.EntityFrameworkCore;
+using TmsApi.Data;
+using TmsApi.Dtos;
+using TmsApi.Entities;
 
 namespace TmsApi.Services;
 
-public class CourseService(ILogger<CourseService> logger) : ICourseService
+public class CourseService(TmsDbContext context, ILogger<CourseService> logger) : ICourseService
 {
-    private readonly ConcurrentDictionary<string, Course> _courses = new();
-
-    public Task<IEnumerable<Course>> GetAllAsync()
+    public async Task<CourseResponseDto?> GetByIdAsync(int id, CancellationToken ct)
     {
-        logger.LogInformation("Retrieving all courses from memory state storage.");
-        return Task.FromResult(_courses.Values.AsEnumerable());
+        return await context.Courses
+            .AsNoTracking()
+            .Where(c => c.Id == id)
+            .Select(c => new CourseResponseDto(c.Id, c.Code, c.Title, c.MaxCapacity, c.Enrollments.Count)) // In-database projection count
+            .FirstOrDefaultAsync(ct);
     }
 
-    public Task<Course?> GetByCodeAsync(string code)
+    public async Task<CourseResponseDto> CreateAsync(CreateCourseRequest request, CancellationToken ct)
     {
-        var standardizedCode = code.ToUpperInvariant();
-        
-        if (!_courses.TryGetValue(standardizedCode, out var course))
+        var course = new Course
         {
-            // Logging structured warnings for missing resources as learned in the blueprint
-            logger.LogWarning("Course retrieval failed. Course with Code {CourseCode} was not found.", standardizedCode);
-            return Task.FromResult<Course?>(null);
-        }
-
-        logger.LogInformation("Successfully retrieved course details for Code {CourseCode}.", standardizedCode);
-        return Task.FromResult<Course?>(course);
-    }
-
-    public Task<Course> CreateAsync(Course course)
-    {
-        var standardizedCode = course.Code.ToUpperInvariant();
-        
-        if (_courses.ContainsKey(standardizedCode))
-        {
-            logger.LogWarning("Conflict detected! Action stopped. Course with Code {CourseCode} already exists.", standardizedCode);
-            throw new System.ArgumentException($"Course with code {standardizedCode} already exists.");
-        }
-
-        var savedCourse = new Course 
-        { 
-            Code = standardizedCode, 
-            Title = course.Title, 
-            Capacity = course.Capacity,
-            EnrolledCount = 0 
+            Code = request.Code,
+            Title = request.Title,
+            MaxCapacity = request.MaxCapacity
         };
-        
-        _courses[standardizedCode] = savedCourse;
-        
-        // Structured logging allows log aggregators to parse parameters like {CourseCode} easily
-        logger.LogInformation("Successfully created new course record: {CourseCode} - {CourseTitle}.", standardizedCode, course.Title);
-        return Task.FromResult(savedCourse);
+
+        context.Courses.Add(course);
+        await context.SaveChangesAsync(ct);
+        logger.LogInformation("Created course metadata token mapping entry {Id}", course.Id);
+
+        return (await GetByIdAsync(course.Id, ct))!;
     }
 
-    public Task<bool> DeleteAsync(string code)
+    public async Task<bool> CodeExistsAsync(string code, CancellationToken ct)
     {
-        var standardizedCode = code.ToUpperInvariant();
-        var removed = _courses.TryRemove(standardizedCode, out _);
-
-        if (!removed)
-        {
-            logger.LogWarning("Course deletion failed. Target course with Code {CourseCode} did not exist.", standardizedCode);
-            return Task.FromResult(false);
-        }
-
-        logger.LogInformation("Successfully deleted course with Code {CourseCode} from storage.", standardizedCode);
-        return Task.FromResult(true);
+        return await context.Courses.AsNoTracking().AnyAsync(c => c.Code == code, ct);
     }
 }

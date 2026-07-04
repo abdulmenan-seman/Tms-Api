@@ -1,13 +1,10 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using TmsApi.Models;
+using TmsApi.Dtos;
 
 namespace TmsApi.Services;
 
 public interface ICourseService
 {
-    Task<IEnumerable<Course>> GetAllAsync();
-    Task<Course?> GetByCodeAsync(string code);
-    Task<Course> CreateAsync(Course course);
-    Task<bool> DeleteAsync(string code);
+    Task<CourseResponseDto?> GetByIdAsync(int id, CancellationToken ct);
+    Task<CourseResponseDto> CreateAsync(CreateCourseRequest request, CancellationToken ct);
+    Task<bool> CodeExistsAsync(string code, CancellationToken ct); // Ready for Ex 3
 }
