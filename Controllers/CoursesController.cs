@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
-using TmsApi.Models;
+using TmsApi.Dtos;
 using TmsApi.Services;
 
 namespace TmsApi.Controllers;
@@ -9,37 +8,27 @@ namespace TmsApi.Controllers;
 [Route("api/courses")]
 public class CoursesController(ICourseService courseService) : ControllerBase
 {
-    // GET /api/courses
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
+    [HttpGet("{id:int}", Name = nameof(GetCourseById))]
+    public async Task<IActionResult> GetCourseById(int id, CancellationToken ct)
     {
-        var courses = await courseService.GetAllAsync();
-        return Ok(courses); // 200 OK
+        var course = await courseService.GetByIdAsync(id, ct);
+        return course is not null ? Ok(course) : NotFound();
     }
 
-    // GET /api/courses/{code}
-    [HttpGet("{code}")]
-    public async Task<IActionResult> GetByCode(string code)
+   [HttpPost]
+public async Task<IActionResult> CreateCourse(CreateCourseRequest request, CancellationToken ct)
+{
+    if (await courseService.CodeExistsAsync(request.Code, ct))
     {
-        var course = await courseService.GetByCodeAsync(code);
-        return course is not null ? Ok(course) : NotFound(); // 200 OK or 404 Not Found
+        return Conflict(new ProblemDetails
+        {
+            Title = "Course code already exists",
+            Detail = $"A course with code '{request.Code}' is already registered.",
+            Status = StatusCodes.Status409Conflict
+        }); // Prevent unique index crashes
     }
 
-    // POST /api/courses
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] Course course)
-    {
-        var createdCourse = await courseService.CreateAsync(course);
-        
-        // Emits 201 Created and configures Location to: /api/courses/{code}
-        return CreatedAtAction(nameof(GetByCode), new { code = createdCourse.Code }, createdCourse);
-    }
-
-    // DELETE /api/courses/{code}
-    [HttpDelete("{code}")]
-    public async Task<IActionResult> Delete(string code)
-    {
-        var deleted = await courseService.DeleteAsync(code);
-        return deleted ? NoContent() : NotFound(); // 204 No Content or 404 Not Found
-    }
+    var result = await courseService.CreateAsync(request, ct);
+    return CreatedAtAction(nameof(GetCourseById), new { id = result.Id }, result);
+}
 }

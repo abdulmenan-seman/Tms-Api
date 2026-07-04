@@ -24,9 +24,9 @@ builder.Services.AddOptions<PaymentOptions>()
     .ValidateDataAnnotations()          // Evaluates data layout model validation parameters
     .ValidateOnStart();                 // Forces immediate checking at process startup
 // Add the conflicting registrations
-builder.Services.AddSingleton<EnrollmentWorker>();
-builder.Services.AddSingleton<IEnrollmentService, EnrollmentService>();
-builder.Services.AddSingleton<ICourseService, CourseService>();
+// builder.Services.AddSingleton<EnrollmentWorker>();
+builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
+builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddSingleton<IStudentService, StudentService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -65,9 +65,9 @@ using (var scope = app.Services.CreateScope())
 
         var courses = new List<Course>
         {
-            new() { Code = "CS-101", Title = "Introduction to Computer Science", Capacity = 30 },
-            new() { Code = "CS-201", Title = "Data Structures and Algorithms", Capacity = 25 },
-            new() { Code = "MAT-101", Title = "Calculus I", Capacity = 40 }
+            new() { Code = "CS-101", Title = "Introduction to Computer Science", MaxCapacity = 30 },
+            new() { Code = "CS-201", Title = "Data Structures and Algorithms", MaxCapacity = 25 },
+            new() { Code = "MAT-101", Title = "Calculus I", MaxCapacity = 40 }
         };
         context.Courses.AddRange(courses);
         
@@ -94,9 +94,6 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
 app.UseStatusCodePages(); // Transforms empty status codes (like bare 404s) into ProblemDetails JSON
-
-// Step B: Exception handler catches errors gracefully
-app.UseExceptionHandler("/error");
 
 
 // Step C: Basic protocols & routing
@@ -128,8 +125,8 @@ else
 {
     app.UseExceptionHandler();  // Production hides Scalar automatically
 }
-app.MapGet("/api/error", () =>
-{
-    throw new TmsDatabaseException("Simulated database failure for ProblemDetails testing");
-});
+// app.MapGet("/api/error", () =>
+// {
+//     throw new TmsDatabaseException("Simulated database failure for ProblemDetails testing");
+// });
 app.Run();
