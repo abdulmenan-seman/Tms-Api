@@ -4,6 +4,7 @@ using TmsApi.Data;
 using TmsApi.Entities;
 using Microsoft.AspNetCore.OpenApi;
 using Scalar.AspNetCore;
+using TmsApi.Filters;
 using TmsApi.Services;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +31,11 @@ builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddSingleton<IStudentService, StudentService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
+builder.Services.AddControllers(options =>
+{
+    // Registers the filter type globally so the DI engine resolves the logger cleanly[cite: 4]
+    options.Filters.Add<AuditLogFilter>();
+});
 
 // Enforce container self-tests during process bootstrap
 builder.Host.UseDefaultServiceProvider(options =>
@@ -117,6 +123,9 @@ app.MapControllers();
 
 if (app.Environment.IsDevelopment())
 {
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
+    await TmsApi.Persistence.DataSeeder.SeedAsync(context);
     app.MapOpenApi();
     //use swagger ui in development
     app.MapScalarApiReference();  // This creates the /scalar/v1 endpoint
