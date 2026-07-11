@@ -31,4 +31,16 @@ public class EnrollmentService(TmsDbContext context, ILogger<EnrollmentService> 
 
         return (await GetByIdAsync(courseId, enrollment.Id, ct))!;
     }
+    public async Task<IReadOnlyList<EnrollmentResponseDto>> GetByCourseAsync(int courseId, CancellationToken ct)
+    {
+        return await context.Enrollments
+            .AsNoTracking()
+            .Where(e => e.CourseId == courseId)
+            .Select(e => new EnrollmentResponseDto(
+                e.Id,
+                e.StudentId,
+                e.CourseId,
+                e.EnrolledAt))
+            .ToListAsync(ct); // Projects and completes database roundtrip efficiently
+    }
 }
