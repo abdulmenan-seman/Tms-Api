@@ -1,112 +1,160 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using TmsApi.Data;
-using TmsApi.Entities;
+using TmsApi.Dtos;
+using TmsApi.Services;
 
 namespace TmsApi.Controllers;
 
 [ApiController]
 [Route("api/students")]
-public class StudentsController(TmsDbContext context) : ControllerBase
+[Tags("Students")]
+[Produces("application/json")]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+public class StudentsController(
+    IStudentService studentService,
+    LinkGenerator linkGenerator) : ControllerBase
 {
-    // =========================================================================
-    // EXERCISE 3 - TODO 1: SERVER-SIDE PAGINATION (LIMIT / OFFSET IN SQL)
-    // =========================================================================
-    [HttpGet]
-    public async Task<IActionResult> GetPagedStudents(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
-        CancellationToken cancellationToken = default)
+    [HttpGet(Name = nameof(GetPagedStudents))]
+    [ProducesResponseType(typeof(PagedResponse<StudentResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [EndpointSummary("Retrieve a paged list of students")]
+    [EndpointDescription("Fetches a subset of system student records using structured filter, sort, and offset parameters.")]
+    public async Task<IActionResult> GetPagedStudents([FromQuery] PagedRequest request, CancellationToken ct)
     {
-        // Enforce parameter limits
-        if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+        var result = await studentService.GetPagedAsync(request, ct);
 
-        // Perform constant-cost counting on the PostgreSQL engine
-        int totalRecords = await context.Students.CountAsync(cancellationToken);
-        int totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
+        // --- HATEOAS STRUCTURAL PAGINATION LINKS ---
+        var navigationLinks = new List<LinkDto>();
 
-        // Execute stable sorting, offsets, and limits directly inside PostgreSQL
-        var items = await context.Students
-            .OrderBy(s => s.Name)               // Rule: Always OrderBy before Skip/Take
-            .ThenBy(s => s.Id)                  // Secondary sort to guarantee deterministic order across pages
-            .Skip((page - 1) * pageSize)        // Skip translates directly to SQL OFFSET
-            .Take(pageSize)                     // Take translates directly to SQL LIMIT
-            .Select(s => new
-            {
-                s.Id,
-                s.RegistrationNumber,
-                s.Name,
-                s.GPA,
-                s.IsActive
-            })
-            .ToListAsync(cancellationToken);    // Query is materialized and sent to database here
+        // 1. Always append the current link (Self)
+        navigationLinks.Add(new(
+            "self", 
+            linkGenerator.GetPathByName(HttpContext, nameof(GetPagedStudents), request)!, 
+            "GET"));
 
-        return Ok(new
+        // 2. Append Previous Page link if available
+        if (result.HasPrevious)
         {
-            CurrentPage = page,
-            PageSize = pageSize,
-            TotalPages = totalPages,
-            TotalRecords = totalRecords,
-            HasPrevious = page > 1,
-            HasNext = page < totalPages,
-            Data = items
-        });
-    }
-    // GET /api/students/{iauto-generated-id-or-reg-number} - Flexible endpoint to fetch by either primary key or registration number
-    [HttpGet("{identifier}")]
-    public async Task<IActionResult> GetByIdentifier(string identifier, CancellationToken cancellationToken = default)
-    {
-        // Attempt to parse identifier as integer ID first
-        if (int.TryParse(identifier, out int id))
-        {
-            var studentById = await context.Students.FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
-            if (studentById is not null) return Ok(studentById);
+            navigationLinks.Add(new(
+                "prev-page", 
+                linkGenerator.GetPathByName(HttpContext, nameof(GetPagedStudents), request with { Page = request.Page - 1 })!, 
+                "GET"));
         }
 
-        // If parsing fails, treat identifier as registration number
-        var studentByReg = await context.Students.FirstOrDefaultAsync(s => s.RegistrationNumber == identifier, cancellationToken);
-        return studentByReg is not null ? Ok(studentByReg) : NotFound();
+        // 3. Append Next Page link if available
+        if (result.HasNext)
+        {
+            navigationLinks.Add(new(
+                "next-page", 
+                linkGenerator.GetPathByName(HttpContext, nameof(GetPagedStudents), request with { Page = request.Page + 1 })!, 
+                "GET"));
+        }
+
+        var hypermediaResponse = new
+        {
+            Metadata = new { result.TotalCount, result.Page, result.PageSize, result.TotalPages },
+            Data = result.Items,
+            Links = navigationLinks
+        };
+
+        return Ok(hypermediaResponse);
     }
-    // POST /api/students - Create a new student record safely
-    // =========================================================================
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] Student student, CancellationToken cancellationToken = default)
+
+    [HttpGet("{id:int}", Name = nameof(GetStudentById))]
+    [ProducesResponseType(typeof(StudentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [EndpointSummary("Get a student by ID")]
+    public async Task<IActionResult> GetStudentById(int id, CancellationToken ct)
     {
-        // // 1. Validate payload basics
-        // if (string.IsNullOrWhiteSpace(student.RegistrationNumber) || string.IsNullOrWhiteSpace(student.Name))
-        // {
-        //     return BadRequest(new { Message = "Registration number and Name are required fields." });
-        // }
+        var student = await studentService.GetByIdAsync(id, ct);
+        if (student is null)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "Student Profile Not Found",
+                Detail = $"No active student record discovered with Identifier {id}.",
+                Status = StatusCodes.Status404NotFound
+            });
+        }
+        return Ok(student);
+    }
 
-        // // 2. Guard against duplicate natural keys (prevents uncaught Postgres Unique Index Violations)
-        // bool exists = await context.Students.AnyAsync(
-        //     s => s.RegistrationNumber == student.RegistrationNumber, 
-        //     cancellationToken);
+    [HttpPost]
+    [ProducesResponseType(typeof(StudentResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [EndpointSummary("Register a new student")]
+    public async Task<IActionResult> CreateStudent(CreateStudentRequest request, CancellationToken ct)
+    {
+        if (await studentService.RegistrationNumberExistsAsync(request.RegistrationNumber, ct))
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "Registration Number Conflict",
+                Detail = $"The registration number '{request.RegistrationNumber}' is already registered to an active student.",
+                Status = StatusCodes.Status409Conflict
+            });
+        }
 
-        // if (exists)
-        // {
-        //     return Conflict(new { Message = $"A student with registration number '{student.RegistrationNumber}' already exists." });
-        // }
+        var result = await studentService.CreateAsync(request, ct);
+        return CreatedAtAction(nameof(GetStudentById), new { id = result.Id }, result);
+    }
 
-        // 3. Clear safety parameters to prevent Overposting vulnerabilities
-        student.Id = 0; // Ensures PostgreSQL ignores any client-supplied integer surrogate ID
-        student.Enrollments = new List<Enrollment>(); // Clear any nested client-supplied arrays
+    [HttpPut("{id:int}")]
+    [ProducesResponseType(typeof(StudentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status412PreconditionFailed)]
+    [EndpointSummary("Update a student profile")]
+    [EndpointDescription("Updates properties safely. Guards against lost mutations using database row concurrency checking tokens.")]
+    public async Task<IActionResult> UpdateStudent(int id, UpdateStudentRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var result = await studentService.UpdateAsync(id, request, ct);
+            if (result is null)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Title = "Modification Target Missing",
+                    Detail = $"Cannot update student profile. Identifier {id} does not exist.",
+                    Status = StatusCodes.Status404NotFound
+                });
+            }
 
-        // 4. EF Core best practice: Use synchronous .Add() to register state with tracker
-        context.Students.Add(student);
-        
-        // 5. Commit state asynchronously to PostgreSQL
-        await context.SaveChangesAsync(cancellationToken);
+            return Ok(result);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Catching the EF Core tracking mismatch and parsing it as a 412 status code
+            return StatusCode(StatusCodes.Status412PreconditionFailed, new ProblemDetails
+            {
+                Title = "Concurrency Conflict (Precondition Failed)",
+                Detail = "The profile record has been modified by another processes thread since you loaded the form layout. Refresh and re-attempt update.",
+                Status = StatusCodes.Status412PreconditionFailed
+            });
+        }
+    }
 
-        // Emits 201 Created and configures Location header pointing back to our resource endpoint
-        return CreatedAtAction(
-            nameof(GetByIdentifier), 
-            new { identifier = student.Id }, 
-            student);
+    [HttpDelete("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [EndpointSummary("Soft-delete a student")]
+    public async Task<IActionResult> DeleteStudent(int id, CancellationToken ct)
+    {
+        var succeeded = await studentService.DeleteAsync(id, ct);
+        if (!succeeded)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "Deletion Target Missing",
+                Detail = $"Cannot clear profile. Student Identifier {id} does not exist.",
+                Status = StatusCodes.Status404NotFound
+            });
+        }
+
+        return NoContent();
     }
 }
