@@ -1,13 +1,16 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using TmsApi.Models;
+using TmsApi.Dtos;
 
 namespace TmsApi.Services;
 
 public interface IStudentService
 {
-    Task<IEnumerable<Student>> GetAllAsync();
-    Task<Student?> GetByIdAsync(string id);
-    Task<Student> RegisterAsync(Student student);
-    Task<bool> RemoveAsync(string id);
+    Task<StudentResponseDto?> GetByIdAsync(int id, CancellationToken ct);
+    
+    // Updated from the old structural tuple to our professional generic DTO envelope shape!
+    Task<PagedResponse<StudentResponseDto>> GetPagedAsync(PagedRequest request, CancellationToken ct);
+    
+    Task<StudentResponseDto> CreateAsync(CreateStudentRequest request, CancellationToken ct);
+    Task<StudentResponseDto?> UpdateAsync(int id, UpdateStudentRequest request, CancellationToken ct);
+    Task<bool> DeleteAsync(int id, CancellationToken ct);
+    Task<bool> RegistrationNumberExistsAsync(string regNumber, CancellationToken ct);
 }

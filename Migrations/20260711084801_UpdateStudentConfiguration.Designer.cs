@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TmsApi.Data;
@@ -11,9 +12,11 @@ using TmsApi.Data;
 namespace TmsApi.Migrations
 {
     [DbContext(typeof(TmsDbContext))]
-    partial class TmsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260711084801_UpdateStudentConfiguration")]
+    partial class UpdateStudentConfiguration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -34,21 +37,20 @@ namespace TmsApi.Migrations
                         .HasColumnType("integer");
 
                     b.Property<decimal>("MaxScore")
-                        .HasColumnType("numeric(5,2)");
+                        .HasColumnType("numeric");
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
+                        .HasColumnType("text");
 
                     b.Property<decimal>("Weight")
-                        .HasColumnType("numeric(3,2)");
+                        .HasColumnType("numeric");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CourseId");
 
-                    b.ToTable("Assessments", (string)null);
+                    b.ToTable("Assessments");
                 });
 
             modelBuilder.Entity("TmsApi.Entities.Certificate", b =>
