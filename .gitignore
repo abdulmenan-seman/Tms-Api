@@ -3,6 +3,14 @@ bin/
 obj/
 dist/
 build/
+../TmsApi.Api/bin/
+../TmsApi.Api/obj/
+../TmsApi.Application/bin/
+../TmsApi.Application/obj/
+../TmsApi.Domain/bin/
+../TmsApi.Domain/obj/
+../TmsApi.Infrastructure/bin/
+../TmsApi.Infrastructure/obj/
 
 # Dependencies
 node_modules/
