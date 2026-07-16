@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using TmsApi.Data;
+using Asp.Versioning;
 using TmsApi.Entities;
 using Microsoft.AspNetCore.OpenApi;
 using Scalar.AspNetCore;
@@ -37,6 +38,27 @@ builder.Services.AddControllers(options =>
 {
     // Registers the filter type globally so the DI engine resolves the logger cleanly[cite: 4]
     options.Filters.Add<AuditLogFilter>();
+});
+builder.Services.AddOpenApi("v1", options =>
+{
+    options.ShouldInclude = description => description.GroupName == "v1";
+});
+builder.Services.AddOpenApi("v2", options =>
+{
+    options.ShouldInclude = description => description.GroupName == "v2";
+});
+// Configure the Versioning Services Engine
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0); 
+    options.AssumeDefaultVersionWhenUnspecified = true; 
+    options.ReportApiVersions = true; // Injects api-supported-versions response headers
+    options.ApiVersionReader = new UrlSegmentApiVersionReader(); // Read from URL segment (/api/v1/...)
+})
+.AddApiExplorer(options =>
+{
+    options.GroupNameFormat = "'v'VVV"; // Format group names as v1, v2
+    options.SubstituteApiVersionInUrl = true; // Auto-replace version placeholder in Scalar UI docs
 });
 
 // Enforce container self-tests during process bootstrap
@@ -119,7 +141,7 @@ app.MapGet("/api/assessments/results", () => Results.Ok(new
     studentId = "S-001",
     letterGrade = "A"
 })).RequireAuthorization(); // Retains protected status
-
+app.UseMiddleware<TmsApi.Middleware.V1DeprecationMiddleware>();
 app.MapControllers();
 // After app.MapControllers() or app.UseAuthorization()
 
@@ -130,7 +152,17 @@ if (app.Environment.IsDevelopment())
     await TmsApi.Persistence.DataSeeder.SeedAsync(context);
     app.MapOpenApi();
     //use swagger ui in development
-    app.MapScalarApiReference();  // This creates the /scalar/v1 endpoint
+    app.MapScalarApiReference(
+        options =>
+{
+    options.WithTitle("TMS API Reference")
+           .WithTheme(ScalarTheme.DeepSpace)
+           .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+
+    options.AddDocument("v1", "API Version 1.0")
+           .AddDocument("v2", "API Version 2.0");
+}
+    );  // This creates the /scalar/v1 endpoint
 }
 else
 {
