@@ -20,7 +20,7 @@ public class CoursesController(TmsDbContext context) : ControllerBase
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 50);
 
-        var baseQuery = context.Set<TmsApi.Domain.Entities.Course>().AsNoTracking();
+       var baseQuery = context.Set<Course>().AsNoTracking();
         var totalCount = await baseQuery.CountAsync(ct);
 
         var items = await baseQuery

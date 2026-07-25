@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TmsApi.Infrastructure.Persistence;
+using TmsApi.Application.Courses.Commands;
 using TmsApi.Application.DTOs;
 using TmsApi.Application.Interfaces;
 using TmsApi.Domain.Entities;
@@ -20,6 +21,15 @@ public class CourseService(TmsDbContext context, ILogger<CourseService> logger) 
             .FirstOrDefaultAsync(ct);
     }
 
+    public async Task<CourseResponseDto?> GetByCodeAsync(string code, CancellationToken ct)
+    {
+        return await context.Courses
+            .AsNoTracking()
+            .Where(c => c.Code == code)
+            .Select(c => new CourseResponseDto(c.Id, c.Code, c.Title, c.MaxCapacity, c.Enrollments.Count))
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task<CourseResponseDto> CreateAsync(CreateCourseRequest request, CancellationToken ct)
     {
         var course = new Course
@@ -34,6 +44,20 @@ public class CourseService(TmsDbContext context, ILogger<CourseService> logger) 
         logger.LogInformation("Created course metadata token mapping entry {Id}", course.Id);
 
         return (await GetByIdAsync(course.Id, ct))!;
+    }
+
+    public async Task<CourseResponseDto?> UpdateAsync(UpdateCourseCommand command, CancellationToken ct)
+    {
+        var course = await context.Courses.FirstOrDefaultAsync(c => c.Id == command.Id, ct);
+        if (course is null)
+        {
+            return null;
+        }
+
+        course.Title = command.Title;
+        await context.SaveChangesAsync(ct);
+
+        return await GetByIdAsync(course.Id, ct);
     }
 
     public async Task<bool> CodeExistsAsync(string code, CancellationToken ct)
