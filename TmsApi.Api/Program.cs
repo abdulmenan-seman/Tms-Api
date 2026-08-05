@@ -33,7 +33,13 @@ builder.Services.AddAuthorization();
 // Core Architecture Pipeline Wiring
 builder.Services.AddMediatR(cfg => 
     cfg.RegisterServicesFromAssembly(typeof(EnrollStudentHandler).Assembly));
-    
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngular", policy =>
+        policy.WithOrigins("http://localhost:4200")
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
 
 builder.Services.AddValidatorsFromAssembly(typeof(EnrollStudentValidator).Assembly);
 
@@ -243,6 +249,7 @@ using (var scope = app.Services.CreateScope())
 // --- APPLICATION REQUEST PIPELINE (STRICT MIDDLEWARE ORDER) ---
 
 // Step A: Custom logging goes FIRST to trap and correlate all operations
+app.UseCors("AllowAngular");
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<V1DeprecationMiddleware>();
 
