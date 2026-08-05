@@ -18,6 +18,11 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
             .ValueGeneratedOnAdd();
 
         // Core Properties
+        builder.Property(e => e.Status)
+            .IsRequired()
+            .HasMaxLength(30)
+            .HasDefaultValue("Pending");
+
         builder.Property(e => e.Grade)
             .HasColumnType("numeric(3,2)")
             .IsRequired(false); // Nullable grade since student might be currently enrolled

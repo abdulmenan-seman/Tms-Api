@@ -20,7 +20,8 @@ public class EnrollmentService(TmsDbContext context, ILogger<EnrollmentService> 
                 e.StudentId,
                 e.Course.Title,
                 e.Course.Code,
-                e.EnrolledAt))
+                e.EnrolledAt,
+                e.Status))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -64,7 +65,8 @@ public class EnrollmentService(TmsDbContext context, ILogger<EnrollmentService> 
                 e.StudentId,
                 e.Course.Title,
                 e.Course.Code,
-                e.EnrolledAt))
+                e.EnrolledAt,
+                e.Status))
             .ToListAsync(ct);
     }
 
@@ -79,7 +81,8 @@ public class EnrollmentService(TmsDbContext context, ILogger<EnrollmentService> 
                 e.StudentId,
                 e.Course.Title,
                 e.Course.Code,
-                e.EnrolledAt))
+                e.EnrolledAt,
+                e.Status))
             .ToListAsync(ct);
     }
 }
