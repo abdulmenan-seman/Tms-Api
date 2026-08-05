@@ -43,7 +43,7 @@ public class CoursesController(TmsDbContext context) : ControllerBase
 
         return Ok(new
         {
-            data = rows, // Nested data array payload
+            items = rows, // Nested items array payload
             meta = new // Explicit structural metadata parameters
             {
                 totalCount,
