@@ -8,14 +8,17 @@ using Microsoft.EntityFrameworkCore;
 using TmsApi.Application.DTOs;
 using TmsApi.Application.Enrollments.Commands;
 using TmsApi.Application.Enrollments.Queries;
+using Microsoft.AspNetCore.SignalR;
 using TmsApi.Infrastructure.Persistence;
+using TmsApi.Application.Hubs;
+using TmsApi.Api.Hubs;
 
 namespace TmsApi.Api.Controllers.V2;
 
 [ApiController]
 [Route("api/v{version:apiVersion}/enrollments")]
 [ApiVersion("2.0")]
-public class EnrollmentsController(IMediator mediator, TmsDbContext context) : ControllerBase
+public class EnrollmentsController(IMediator mediator, TmsDbContext context, IHubContext<TmsHub, ITmsHubClient> hubContext) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -64,23 +67,28 @@ public class EnrollmentsController(IMediator mediator, TmsDbContext context) : C
     }
 
     [HttpPost("{id}/approve")]
-    public async Task<IActionResult> Approve(int id, CancellationToken ct)
+public async Task<IActionResult> Approve(int id, CancellationToken ct)
+{
+    var enrollment = await context.Enrollments.FirstOrDefaultAsync(e => e.Id == id, ct);
+    if (enrollment is null)
     {
-        var enrollment = await context.Enrollments.FirstOrDefaultAsync(e => e.Id == id, ct);
-        if (enrollment is null)
+        return NotFound(new ProblemDetails
         {
-            return NotFound(new ProblemDetails
-            {
-                Title = "Enrollment Not Found",
-                Detail = $"No enrollment found with ID {id}.",
-                Status = StatusCodes.Status404NotFound
-            });
-        }
-
-        enrollment.Status = "Approved";
-        await context.SaveChangesAsync(ct);
-        return NoContent();
+            Title = "Enrollment Not Found",
+            Detail = $"No enrollment found with ID {id}.",
+            Status = StatusCodes.Status404NotFound
+        });
     }
+
+    // Update status in DB
+    enrollment.Status = "Approved";
+    await context.SaveChangesAsync(ct);
+
+    // Broadcast to all connected clients
+    await hubContext.Clients.All.ReceiveEnrollmentStatusUpdated(id.ToString(), "Approved");
+
+    return NoContent();
+}
 
     [HttpGet("{studentId}/schedule")]
     public async Task<IActionResult> GetSchedule(int studentId, CancellationToken ct)

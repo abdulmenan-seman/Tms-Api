@@ -5,6 +5,7 @@ using TmsApi.Infrastructure.Persistence;
 using Asp.Versioning;
 using TmsApi.Api.Middleware;
 using TmsApi.Domain.Entities;
+using TmsApi.Api.Hubs;
 using FluentValidation;
 using MediatR;
 using System.Threading.RateLimiting;
@@ -14,10 +15,16 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using TmsApi.Api.RateLimiting;
 using TmsApi.Api.ExceptionHandlers;
+using System.Threading.Channels;
 using TmsApi.Application.Behaviors;
 using TmsApi.Application.Enrollments.Commands;
 using Microsoft.AspNetCore.OpenApi;
 using Scalar.AspNetCore;
+using TmsApi.Application.Transcripts;
+using TmsApi.Infrastructure.Transcripts;
+using TmsApi.Application.Notifications;
+using TmsApi.Api.Notifications;
+using TmsApi.Infrastructure.Workers;
 using TmsApi.Application.Filters;
 using TmsApi.Infrastructure.Services;
 using TmsApi.Application.Interfaces;
@@ -40,13 +47,20 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowAnyMethod());
 });
-
+builder.Services.AddSignalR();
 builder.Services.AddValidatorsFromAssembly(typeof(EnrollStudentValidator).Assembly);
+builder.Services.AddSingleton(Channel.CreateBounded<TranscriptRequest>(
+    new BoundedChannelOptions(100)
+    {
+        FullMode = BoundedChannelFullMode.Wait
+    }));
+builder.Services.AddHostedService<TranscriptWorker>();
 
 // PIPELINE ORDER MATTERS: Logging Behavior must wrap Validation Behavior
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 builder.Services.AddScoped<ICachedCourseService, CachedCourseService>();
+builder.Services.AddSingleton<ITranscriptNotificationService, SignalRTranscriptNotificationService>();
 builder.Services.AddHybridCache(options =>
 {
     options.DefaultEntryOptions = new HybridCacheEntryOptions
@@ -58,6 +72,7 @@ builder.Services.AddHybridCache(options =>
 // Exception Filter Translation Wiring
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
+builder.Services.AddSignalR();
 // Register the DbContext with SQL Logging enabled during development
 builder.Services.AddDbContext<TmsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase"))
@@ -75,6 +90,7 @@ builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<IAssessmentService, AssessmentService>();
+builder.Services.AddSingleton<ITranscriptStatusStore, InMemoryTranscriptStatusStore>();
 builder.Services.AddOpenApi();
 builder.Services.AddControllers(options =>
 {
@@ -89,6 +105,9 @@ builder.Services.AddOpenApi("v2", options =>
 {
     options.ShouldInclude = description => description.GroupName == "v2";
 });
+builder.Services.AddCors(options =>
+  options.AddPolicy("AllowDev", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+
 // Configure the Versioning Services Engine
 builder.Services.AddApiVersioning(options =>
 {
@@ -105,7 +124,23 @@ builder.Services.AddApiVersioning(options =>
     options.GroupNameFormat = "'v'VVV"; // Format group names as v1, v2
     options.SubstituteApiVersionInUrl = true; // Auto-replace version placeholder in Scalar UI docs
 });
+// Load allowed origins from appsettings.Development.json
+var allowedOrigins = builder.Configuration
+    .GetSection("AllowedOrigins").Get<string[]>() 
+    ?? ["http://localhost:4200"];
 
+// Register the CORS policy in DI container
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("TmsClient", policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials() // Vital for HttpOnly auth cookies in upcoming sessions
+            .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
+    });
+});
 // Enforce container self-tests during process bootstrap
 builder.Host.UseDefaultServiceProvider(options =>
 {
@@ -249,17 +284,21 @@ using (var scope = app.Services.CreateScope())
 // --- APPLICATION REQUEST PIPELINE (STRICT MIDDLEWARE ORDER) ---
 
 // Step A: Custom logging goes FIRST to trap and correlate all operations
-app.UseCors("AllowAngular");
+app.MapHub<TmsHub>("/hubs/tms");
+// CRITICAL: Middleware order matters!
+// UseRouting -> UseCors -> UseAuthentication -> UseAuthorization
+
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<V1DeprecationMiddleware>();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages(); // Transforms empty status codes (like bare 404s) into ProblemDetails JSON
 
-
+app.UseCors("AllowDev");
 // Step C: Basic protocols & routing
 app.UseHttpsRedirection();
 app.UseRouting();
+app.UseCors("TmsClient");
 app.UseRateLimiter();
 // Step D: Security validation blocks unauthorized traffic before endpoint mapping
 app.UseAuthentication();
