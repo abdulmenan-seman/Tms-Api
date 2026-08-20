@@ -337,7 +337,7 @@ app.Use(async (context, next) =>
 // =========================================================================
 // 4. ENDPOINT MAPPINGS
 // =========================================================================
-app.MapHub<TmsHub>("/hubs/tms");
+app.MapHub<TmsHub>("/hubs/tms").RequireCors("TmsClient");
 
 app.MapGet("/api/assessments/results", () => Results.Ok(new
 {
