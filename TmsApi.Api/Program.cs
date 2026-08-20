@@ -29,7 +29,8 @@ using TmsApi.Infrastructure.Workers;
 using TmsApi.Application.Filters;
 using TmsApi.Infrastructure.Services;
 using TmsApi.Application.Interfaces;
-
+using Microsoft.AspNetCore.Identity;
+using TmsApi.Infrastructure.Identity;
 var builder = WebApplication.CreateBuilder(args);
 
 // =========================================================================
@@ -83,7 +84,21 @@ builder.Services.AddHybridCache(options =>
 // Exception Handling & Problem Details
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
+builder.Services.AddIdentityCore<TmsUser>(options =>
+{
+    // Enterprise Password Policy
+    options.Password.RequiredLength = 12;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireDigit = true;
+    options.Password.RequireNonAlphanumeric = true;
 
+    // Brute-Force Lockout Protection
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    options.Lockout.AllowedForNewUsers = true;
+})
+.AddRoles<IdentityRole>()
+.AddEntityFrameworkStores<TmsDbContext>();
 // Entity Framework Core Database Context
 builder.Services.AddDbContext<TmsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase"))
