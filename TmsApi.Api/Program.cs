@@ -31,6 +31,9 @@ using TmsApi.Infrastructure.Services;
 using TmsApi.Application.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using TmsApi.Infrastructure.Identity;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 var builder = WebApplication.CreateBuilder(args);
 
 // =========================================================================
@@ -99,6 +102,28 @@ builder.Services.AddIdentityCore<TmsUser>(options =>
 })
 .AddRoles<IdentityRole>()
 .AddEntityFrameworkStores<TmsDbContext>();
+// Register TokenService in Dependency Injection container
+builder.Services.AddScoped<TokenService>();
+
+// Configure JWT Bearer Authentication Scheme
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+    };
+});
 // Entity Framework Core Database Context
 builder.Services.AddDbContext<TmsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase"))
