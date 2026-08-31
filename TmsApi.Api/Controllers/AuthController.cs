@@ -1,18 +1,20 @@
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
+using TmsApi.Infrastructure.Identity;
+using Asp.Versioning;
+namespace TmsApi.Api.Controllers;
 using TmsApi.Domain.Entities;
 using TmsApi.Infrastructure.Identity;
 using TmsApi.Infrastructure.Persistence;
 using TmsApi.Infrastructure.Services;
 
-namespace TmsApi.Api.Controllers;
-
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
+[ApiVersion("2.0")]
 public class AuthController : ControllerBase
 {
-    private readonly UserManager<TmsUser> _userManager;
+   private readonly UserManager<TmsUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly TmsDbContext _context;
     private readonly TokenService _tokenService;
@@ -27,6 +29,49 @@ public class AuthController : ControllerBase
         _roleManager = roleManager;
         _context = context;
         _tokenService = tokenService;
+    }
+
+    public record RegisterRequest(
+        string Email,
+        string Password,
+        string FirstName,
+        string LastName,
+        string Role);
+        
+
+    [HttpPost("register")]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    {
+        var existingUser = await _userManager.FindByEmailAsync(request.Email);
+        if (existingUser != null)
+        {
+            // Prevent account enumeration by returning a generic response
+            return Ok(new { message = "Registration request received." });
+        }
+
+        var user = new TmsUser
+        {
+            UserName = request.Email,
+            Email = request.Email,
+            FirstName = request.FirstName,
+            LastName = request.LastName
+        };
+
+        var result = await _userManager.CreateAsync(user, request.Password);
+        if (!result.Succeeded)
+        {
+            var errors = result.Errors.Select(e => e.Description);
+            return BadRequest(new { errors });
+        }
+
+        // Ensure requested role exists
+        if (!await _roleManager.RoleExistsAsync(request.Role))
+        {
+            await _roleManager.CreateAsync(new IdentityRole(request.Role));
+        }
+
+        await _userManager.AddToRoleAsync(user, request.Role);
+        return Ok(new { message = "Registration successful." });
     }
 
     public record LoginRequest(string Email, string Password);
@@ -75,7 +120,6 @@ public class AuthController : ControllerBase
     }
 
     public record RefreshRequest(string RefreshToken);
-
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
     {

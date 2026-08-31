@@ -20,6 +20,7 @@ using System.Threading.Channels;
 using TmsApi.Application.Behaviors;
 using TmsApi.Application.Enrollments.Commands;
 using Microsoft.AspNetCore.OpenApi;
+//using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using TmsApi.Application.Transcripts;
 using TmsApi.Infrastructure.Transcripts;
@@ -34,6 +35,8 @@ using TmsApi.Infrastructure.Identity;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authorization;
+using TmsApi.Api.Authorization;
 var builder = WebApplication.CreateBuilder(args);
 
 // =========================================================================
@@ -83,6 +86,11 @@ builder.Services.AddHybridCache(options =>
         LocalCacheExpiration = TimeSpan.FromMinutes(2)
     };
 });
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("CanEditCourse", policy =>
+        policy.Requirements.Add(new CourseInstructorRequirement()));
+
+builder.Services.AddSingleton<IAuthorizationHandler, CourseInstructorHandler>();
 
 // Exception Handling & Problem Details
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -251,7 +259,12 @@ builder.Services.AddRateLimiter(options =>
         opt.QueueLimit = 20;
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
     });
-
+options.AddFixedWindowLimiter("AuthLimiter", opt =>
+    {
+        opt.PermitLimit = 5;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
     options.AddTokenBucketLimiter("search", opt =>
     {
         opt.TokenLimit = 10;
@@ -341,7 +354,33 @@ app.UseStatusCodePages();
 // Custom Middleware
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<V1DeprecationMiddleware>();
+// app.MapGet("/favicon.ico", () => Results.NoContent());
+// app.Use(async (context, next) =>
+// {
+    
+//     context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+//     context.Response.Headers.Append("X-Frame-Options", "DENY");
+//     context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+//     context.Response.Headers.Append(
+//         "Content-Security-Policy",
+//         "default-src 'self'; script-src 'self'; style-src 'self' https://cdn.jsdelivr.net; 'unsafe-inline';"
+//     );
+//     await next();
+// });
 
+// if (app.Environment.IsDevelopment())
+// {
+    app.MapOpenApi();
+    app.MapScalarApiReference(options =>
+    {
+        options.WithTitle("TMS API Reference")
+               .WithTheme(ScalarTheme.DeepSpace)
+               .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+
+        options.AddDocument("v1", "API Version 1.0")
+               .AddDocument("v2", "API Version 2.0");
+    });
+//}
 // Routing
 app.UseHttpsRedirection();
 app.UseRouting();
@@ -379,27 +418,9 @@ app.Use(async (context, next) =>
 // =========================================================================
 app.MapHub<TmsHub>("/hubs/tms").RequireCors("TmsClient");
 
-app.MapGet("/api/assessments/results", () => Results.Ok(new
-{
-    courseCode = "CS-101",
-    studentId = "S-001",
-    letterGrade = "A"
-})).RequireAuthorization();
 
 app.MapControllers();
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.MapScalarApiReference(options =>
-    {
-        options.WithTitle("TMS API Reference")
-               .WithTheme(ScalarTheme.DeepSpace)
-               .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
 
-        options.AddDocument("v1", "API Version 1.0")
-               .AddDocument("v2", "API Version 2.0");
-    });
-}
 
 app.Run();
