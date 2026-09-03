@@ -29,12 +29,7 @@ public class CachedCourseService(
                 var course = await state.service.GetByCodeAsync(state.code, token)
                     ?? throw new KeyNotFoundException($"Course {state.code} not found.");
 
-                return new CourseResponseDto(
-                    course.Id, 
-                    course.Code, 
-                    course.Title, 
-                    course.MaxCapacity, 
-                    course.EnrollmentCount);
+                return course; // Already returns full CourseResponseDto with all 10 fields
             },
             tags: [CacheKeys.CoursesTag],
             cancellationToken: ct);
@@ -66,12 +61,7 @@ public class CachedCourseService(
                     PageSize = 50
                 }, token);
 
-                return response.Items.Select(c => new CourseResponseDto(
-                    c.Id,
-                    c.Code,
-                    c.Title,
-                    c.MaxCapacity,
-                    c.EnrollmentCount)).ToList();
+                return response.Items.ToList(); // Items are already full CourseResponseDto instances
             },
             tags: [CacheKeys.CoursesTag],
             cancellationToken: ct);
